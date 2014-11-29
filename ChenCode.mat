@@ -1,0 +1,115 @@
+function [phi] = KernelFunction(x,x_i,a)
+%Computes the kernel function using cubic spline for this work.
+
+%Cubic Spline Kernel Function
+z_i = abs((x-x_i)/a);
+if z_i <= .5 
+    phi = (2/3)-4*z_i^2+4*z_i^3;
+elseif z_i <= 1
+    phi = (4/3)-4*z_i+4*z_i^2-(4/3)*z_i^3;
+else
+    phi = 0;
+end
+end
+
+function [H,H0] = BasisFunction(basis_order, x, x_i)
+%Computes the column vector using the inputs of x and x_i. Will always be
+%the order + 1 in length. 
+
+H=zeros(basis_order+1,1);
+for i=0:basis_order
+    H(i+1,1) = (x-x_i).^i;
+    H0 = zeros(basis_order+1,1);
+    H0(1) = 1;
+end
+end
+
+function psi = ShapeFunction(x, x_i, basis_order,a)
+%Will find the shape functions
+
+unity = zeros(1,length(x),1);
+completeness = zeros(1,length(x_i));
+
+for i=1:length(x)
+    M = zeros(basis_order+1, basis_order+1);
+    for j=1:length(x_i)
+        %Solving the Moment matrix at every node
+        H = BasisFunction(basis_order, x(i), x_i(j));
+        phi = KernelFunction(x(i),x_i(j),a);
+        M = M+H*H'*phi;
+    end
+    for k=1:length(x_i)
+        %Solving for the shape function of u
+        [H,H0] = BasisFunction(basis_order, x(i), x_i(k));
+        phi = KernelFunction(x(i),x_i(k),a);
+        %Store each value of psi in a matrix so you can reach for the
+        %values later.
+        psi(i,k) = H0'*M^(-1)*H*phi;
+        
+        %Checking Partition of Unity by summing the psi values over x_i and
+        %getting 1 as the value.
+        unity(1,i) = unity(1,i) + H0'*M^(-1)*H*phi;
+        completeness(1,k) = psi(i,k)*x_i(1,k)^basis_order;
+    end
+end
+
+function [uh, u, error] = uFunctions(psi,u_order,x,x_i)
+% Compute the true function and the reproduced function using the shape 
+% function found in ShapeFunction.m
+
+%Creating row vectors for the true and approximated functions
+u = zeros(1,length(x_i));
+uh = zeros(1,length(x));
+
+for i=1:length(x)
+    u(1,i)=x(i)^u_order;
+    for j=1:length(x_i)
+        uh(1,i) = uh(1,i)+psi(j,i)*u(1,i);
+    end
+end
+plot(uh,u), xlabel('Approximated Function (u^h)'), ylabel('True Function (u)')
+error = abs(u-uh);
+subplot(x, error), xlabel('Evaluation Points'), ylabel('Error (u-u^h)')
+print -dpng error_plots.png
+end
+
+
+clear all 
+clc
+%% Will check to see at what rate the uh function is converging at.
+% 
+% Inputs:
+%       dimension - dimension of the domain (using 1D)
+%       a - dilation parameter 
+%       h - interval between the nodes (x_i)
+%       h_eval - number of evaluation points (x)
+%   ?%?    a*h(i) - support size
+%       domain - size of the domain being tested, will be 1.0 for now
+%       u_order - order of the function being studied
+%       basis_order - order of the basis functions
+
+
+domain = 1; %input('Size of Domain: ');
+u_order = 2; %input('Order of the Function Being Reproduced: ');
+basis_order = 1; %input('Order of the Basis Function: ');
+h = input('Array of intervals between the nodes ([a, b, ..., c]: ');
+h_eval = input('Array of number of evaluation points: ');
+
+
+a = zeros(1, length(h));
+for i=1:length(h)
+    a(i) = a(i)+(domain+basis_order)*h(i)
+    x = 0:(domain/h_eval(i)):domain
+    x_i = 0:(h(i)):domain
+    
+    
+    
+    psi = ShapeFunction(x, x_i, basis_order,a(i));
+    [uh, u] = uFunctions(psi,u_order,x,x_i);
+end
+    [uh, u] = uFunctions(psi,u_order,x,x_i);
+    error_norm(i) = norm(error)/length(x);
+    
+    loglog(h, error_norm)
+    
+    
