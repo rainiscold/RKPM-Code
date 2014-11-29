@@ -53,6 +53,18 @@ for i=1:length(x)
     end
 end
 
+function = ReproducingFunctions(x,x_i,basis_order,a,psi)
+
+completeness = zeros(1,length(x));
+
+for i=1:length(x)
+    for j=1:length(x_i)
+        psi = ShapeFunction(x, x_i, basis_order,a);
+        completeness(1,j) = completeness(1,j)+psi(i,j)*(x_i(1,j)')^basis_order
+    end
+end
+end
+
 function [uh, u, error] = uFunctions(psi,u_order,x,x_i)
 % Compute the true function and the reproduced function using the shape 
 % function found in ShapeFunction.m
