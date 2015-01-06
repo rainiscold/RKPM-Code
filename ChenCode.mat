@@ -1,127 +1,133 @@
-function [phi] = KernelFunction(x,x_i,a)
+function phig = GaussKernelFunction(x_g,x_i,a)
 %Computes the kernel function using cubic spline for this work.
 
 %Cubic Spline Kernel Function
-z_i = abs((x-x_i)/a);
+z_i = abs((x_g-x_i))/abs(a);
 if z_i <= .5 
-    phi = (2/3)-4*z_i^2+4*z_i^3;
+    phig = (2/3)-4*z_i^2+4*z_i^3;
 elseif z_i <= 1
-    phi = (4/3)-4*z_i+4*z_i^2-(4/3)*z_i^3;
+    phig = (4/3)-4*z_i+4*z_i^2-(4/3)*z_i^3;
 else
-    phi = 0;
+    phig = 0;
 end
 end
 
-function [H,H0] = BasisFunction(basis_order, x, x_i)
+function [H,H0] = GaussBasisFunction(basis_order, x_g, x_i)
 %Computes the column vector using the inputs of x and x_i. Will always be
 %the order + 1 in length. 
 
 H=zeros(basis_order+1,1);
 for i=0:basis_order
-    H(i+1,1) = (x-x_i).^i;
+    H(i+1,1) = (x_g-x_i).^i;
     H0 = zeros(basis_order+1,1);
     H0(1) = 1;
 end
 end
 
-function psi = ShapeFunction(x, x_i, basis_order,a)
-%Will find the shape functions
+function [psig] = GaussShapeFunction(x_g, x_i, basis_order, a)
 
-unity = zeros(1,length(x),1);
-completeness = zeros(1,length(x_i));
-
-for i=1:length(x)
+for i=1:length(x_g)
     M = zeros(basis_order+1, basis_order+1);
     for j=1:length(x_i)
         %Solving the Moment matrix at every node
-        H = BasisFunction(basis_order, x(i), x_i(j));
-        phi = KernelFunction(x(i),x_i(j),a);
-        M = M+H*H'*phi;
+        H = GaussBasisFunction(basis_order, x_g(i), x_i(j));
+        phig = GaussKernelFunction(x_g(i),x_i(j),a);
+        M = M+H*H'*phig;
     end
-    for k=1:length(x_i)
+    for j=1:length(x_i)
         %Solving for the shape function of u
-        [H,H0] = BasisFunction(basis_order, x(i), x_i(k));
-        phi = KernelFunction(x(i),x_i(k),a);
+        [H,H0] = GaussBasisFunction(basis_order, x_g(i), x_i(j));
+        phig = GaussKernelFunction(x_g(i),x_i(j),a);
         %Store each value of psi in a matrix so you can reach for the
         %values later.
-        psi(i,k) = H0'*M^(-1)*H*phi;
-        
-        %Checking Partition of Unity by summing the psi values over x_i and
-        %getting 1 as the value.
-        unity(1,i) = unity(1,i) + H0'*M^(-1)*H*phi;
-        completeness(1,k) = psi(i,k)*x_i(1,k)^basis_order;
+        psig(i,j) = H0'*M^(-1)*H*phig;
     end
 end
+end
 
-function = ReproducingFunctions(x,x_i,basis_order,a,psi)
+function GaussReproducingFunctions(x_g, x_i, basis_order, a, psi)
 
-completeness = zeros(1,length(x));
+completeness = zeros(1,length(x_g));
 
-for i=1:length(x)
+for i=1:length(x_g)
     for j=1:length(x_i)
-        psi = ShapeFunction(x, x_i, basis_order,a);
+        psi = GaussShapeFunction(x_g, x_i, basis_order,a);
         completeness(1,j) = completeness(1,j)+psi(i,j)*(x_i(1,j)')^basis_order
     end
 end
 end
 
-function [uh, u, error] = uFunctions(psi,u_order,x,x_i)
+function [u_g, uh_g] = GaussuFunctions(u_order, x_i, basis_order, a, nint)
 % Compute the true function and the reproduced function using the shape 
-% function found in ShapeFunction.m
+% function found in GaussShapeFunction.m
 
-%Creating row vectors for the true and approximated functions
-u = zeros(1,length(x_i));
-uh = zeros(1,length(x));
-
-for i=1:length(x)
-    u(1,i)=x(i)^u_order;
-    for j=1:length(x_i)
-        uh(1,i) = uh(1,i)+psi(j,i)*u(1,i);
-    end
+u_xi = zeros(1,length(x_i));
+for j=1:length(x_i)
+    u_xi(1,j) = x_i(1,j)^u_order;
 end
-plot(uh,u), xlabel('Approximated Function (u^h)'), ylabel('True Function (u)')
-error = abs(u-uh);
-subplot(x, error), xlabel('Evaluation Points'), ylabel('Error (u-u^h)')
-print -dpng error_plots.png
+%% Gauss Quadrature functions
+% Will create the true and approximated function with the points created to
+% solve for Gauss Quadrature
+
+[x_g,w_g] = GaussPointsandWeights(nint,x_i);
+[psig] = GaussShapeFunction(x_g, x_i, basis_order, a);
+
+u_g = zeros(1,length(x_g));
+uh_g = zeros(size(psig,1),1);
+
+for i=1:length(x_g)
+   u_g(i) = w_g(i)*x_g(i)^u_order;
+end
+for i=1:size(psig,1)
+    uh_g(i,1) = sum(psig(i,:)*u_xi');
+end
 end
 
-
-clear all 
-clc
+%function GaussConvergenceStudies
 %% Will check to see at what rate the uh function is converging at.
 % 
 % Inputs:
 %       dimension - dimension of the domain (using 1D)
-%       a - dilation parameter 
 %       h - interval between the nodes (x_i)
-%       h_eval - number of evaluation points (x)
-%   ?%?    a*h(i) - support size
 %       domain - size of the domain being tested, will be 1.0 for now
 %       u_order - order of the function being studied
 %       basis_order - order of the basis functions
+%       nint - number of integration points to solve for error using GQuad
+%
+% Finds a, the dilation parameter, 
 
 
 domain = 1; %input('Size of Domain: ');
 u_order = 2; %input('Order of the Function Being Reproduced: ');
 basis_order = 1; %input('Order of the Basis Function: ');
-h = input('Array of intervals between the nodes ([a, b, ..., c]: ');
-h_eval = input('Array of number of evaluation points: ');
+h_pts = [10 15]; %input('Number of nodes ([a, b, ..., c]): ');
+nint = 3; %input('Number of Gauss Quadtrature integration points: ');
 
+a = zeros(1, length(h_pts));
+hlog = zeros(1,length(h_pts));
 
-a = zeros(1, length(h));
-for i=1:length(h)
-    a(i) = a(i)+(domain+basis_order)*h(i)
-    x = 0:(domain/h_eval(i)):domain
-    x_i = 0:(h(i)):domain
+for i=1:length(h_pts)
+    h = h_pts(1,i);
+    hlog(1,i) = domain/h;
+    a(1,i) = (domain+basis_order)*(domain/h);
     
+    x_i = 0:(domain/h):domain;
+    [x_g, w_g] = GaussPointsandWeights(nint, x_i);
+    x = 0:(domain/(h*nint)):domain;
     
+    [psig] = GaussShapeFunction(x_g, x_i, basis_order,a(1,i));
+    [u_g, uh_g] = GaussuFunctions(u_order, x_i, basis_order, a, nint);
     
-    psi = ShapeFunction(x, x_i, basis_order,a(i));
-    [uh, u] = uFunctions(psi,u_order,x,x_i);
+    error_norm(i) = sum(((uh_g')-(u_g)).^2);  
 end
-    [uh, u] = uFunctions(psi,u_order,x,x_i);
-    error_norm(i) = norm(error)/length(x);
-    
-    loglog(h, error_norm)
-    
-    
+%--------------PLOT-------------------------%
+    figure('Color', [1 1 1])
+    subplot(1,2,1)
+    loglog(hlog, error_norm, 'Color', [.91 0.41 0.17], 'Linewidth', 2)
+    xlabel('log(h)'), ylabel('log(|u^h-u|)'), title('L2 Norm of Basis Order: 1, Fxn Order: 2'); 
+    grid on
+    subplot(1,2,2)
+    plot(uh_g,u_g), xlabel('Approximated Function (u^h)'), ylabel('True Function (u)'), title('Approximated Solution to True Solution')
+    grid on
+    print -dpng error_plots.png
+%end
