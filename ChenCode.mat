@@ -53,7 +53,7 @@ for i=1:length(x)
     end
 end
 
-function [u_x, uh, u_g, uh_g] = uFunctions(u_order, x, x_i, basis_order, a, nint)
+function [u, uh] = uFunctions(u_order, x, x_i, basis_order, a)
 % Compute the true function and the reproduced function using the shape 
 % function found in ShapeFunction.m
 
@@ -64,12 +64,12 @@ psi = ShapeFunction(x, x_i, basis_order, a);
 %
 %Real Function
 u_xi = zeros(1,length(x_i));
-u_x = zeros(1,length(x));
+u = zeros(1,length(x));
 %Approximated Function
 uh = zeros(size(psi,1),1);
 
 for i=1:length(x)
-    u_x(1,i) = x(i)^u_order;
+    u(1,i) = x(i)^u_order;
 end
 for j=1:length(x_i)
     u_xi(1,j) = x_i(1,j)^u_order;
@@ -77,24 +77,6 @@ end
 
 for k=1:size(psi,1) % not sure if this step is correct
     uh(k,1) = sum(psi(k,:)*u_xi');
-end
-
-%% Gauss Quadrature functions
-% Will create the true and approximated function with the points creted to
-% solve for Gauss Quadrature
-
-[x_g,w_g] = GaussPointsandWeights(nint,x_i);
-[psig] = GaussShapeFunction(x_g, x_i, basis_order, a);
-
-u_g = zeros(1,length(x_g));
-uh_g = zeros(size(psig,1),1);
-
-for i=1:length(x_g)
-   u_g(i) = w_g(i)*x_g(i)^u_order;
-end
-for i=1:size(psig,1)
-    uh_g(i,1) = sum(psig(i,:)*u_xi');
-end
 end
 
 function ReproducingFunctions(x, x_i, basis_order, a)
@@ -109,63 +91,36 @@ for i=1:length(x)
 end
 end
 
-function [x_g,w_g] = GaussPointsandWeights(nint,x_i)
-%Finds the corresponding weights and abscissa in the grid of a 1D domain.
-nint = 3;
-gpts_original = GaussAbcissa(nint);
-wpts_original = GaussWeights(nint);
+function [psi] = ShapeFunction(x, x_i, basis_order, a)
+%Will find the shape functions
 
-grid_1 = 0:0.1:1;
+unity = zeros(1,length(x),1);
+completeness = zeros(1,length(x_i));
 
-x_integration = zeros(length(gpts_original),length(grid_1)-1);
-gpts = zeros(length(gpts_original),1);
-weights = zeros(length(wpts_original),length(grid_1)-1);
-wpts = zeros(length(wpts_original),1);
-
-for i = 1:(length(grid_1)-1)
-    for j = 1:length(gpts)
-        a = 0.1*(i-1);
-        b = 0.1*(i);
-        
-        gpts(j) = ((b-a)/2)*gpts_original(j)+((b+a)/2);
-        x_integration(j,i) = x_integration(j,i)+gpts(j);
-    end
-    for j = 1:length(wpts)
-        a = 0.1*(i-1);
-        b = 0.1*(i);
-        
-        wpts(j) = ((b-a)/2)*wpts_original(j);
-        weights(j,i) = weights(j,i)+wpts(j);
-        
-    end
-end
-
-x_g = reshape(x_integration,1,[]);
-w_g = reshape(weights,1,[]);
-end
-
-function [psig] = GaussShapeFunction(x_g, x_i, basis_order, a)
-
-for i=1:length(x_g)
+for i=1:length(x)
     M = zeros(basis_order+1, basis_order+1);
     for j=1:length(x_i)
         %Solving the Moment matrix at every node
-        H = BasisFunction(basis_order, x_g(i), x_i(j));
-        phig = KernelFunction(x_g(i),x_i(j),a);
-        M = M+H*H'*phig;
+        H = BasisFunction(basis_order, x(i), x_i(j));
+        phi = KernelFunction(x(i),x_i(j),a);
+        M = M+H*H'*phi;
     end
     for k=1:length(x_i)
         %Solving for the shape function of u
-        [H,H0] = BasisFunction(basis_order, x_g(i), x_i(k));
-        phig = KernelFunction(x_g(i),x_i(k),a);
+        [H,H0] = BasisFunction(basis_order, x(i), x_i(k));
+        phi = KernelFunction(x(i),x_i(k),a);
         %Store each value of psi in a matrix so you can reach for the
         %values later.
-        psig(i,k) = H0'*M^(-1)*H*phig;
+        psi(i,k) = H0'*M^(-1)*H*phi;
+        
+        %Checking Partition of Unity by summing the psi values over x_i and
+        %getting 1 as the value.
+        unity(1,i) = unity(1,i) + H0'*M^(-1)*H*phi;
+        completeness(1,k) = psi(i,k)*x_i(1,k)^basis_order;
     end
 end
-end
 
-%function [x_i, x, nint] = ConvergenceStudies
+function [error_norm, hlog, u, uh] = ConvergenceStudies
 %% Will check to see at what rate the uh function is converging at.
 % 
 % Inputs:
@@ -180,31 +135,35 @@ end
 %
 % Finds a, the dilation parameter, 
 
-
 domain = 1; %input('Size of Domain: ');
 u_order = 2; %input('Order of the Function Being Reproduced: ');
 basis_order = 1; %input('Order of the Basis Function: ');
-h_pts = [10, 100]; %input('Number of nodes ([a, b, ..., c]): ');
-h_eval = 1000; %input('Number of evaluation points: ');
-nint = 3; %input('Number of Gauss Quadtrature integration points: ');
-
+h_pts = [10 100]; %input('Number of nodes ([a, b, ..., c]): ');
+h_eval = 100; %input('Number of evaluation points: ');
 
 a = zeros(1, length(h_pts));
 hlog = zeros(1,length(h_pts));
+
 for i=1:length(h_pts)
     h = h_pts(1,i);
     hlog(1,i) = domain/h;
     a(1,i) = (domain+basis_order)*(domain/h);
-    x = 0:(domain/h_eval):domain;
+    
     x_i = 0:(domain/h):domain;
+    x = 0:(domain/h_eval):domain;
     
-    [psig] = GaussShapeFunction(x, x_i, basis_order,a(1,i));
-    [u_x, uh, u_g, uh_g] = uFunctions(u_order, x, x_i, basis_order, a(1,i), nint);
+    [psi] = ShapeFunction(x, x_i, basis_order,a(1,i));
+    [u, uh] = uFunctions(u_order, x, x_i, basis_order, a(1,i));
     
-    error_norm(i) = sum(((uh_g')-(u_g)).^2)
-    
-    
+    error_norm(i) = norm(u-uh')/sqrt(length(x));  
 end
+end
+
+%% Convergence Studies Plot
+function ConvPlots
+
+[error_norm, hlog, u, uh] = ConvergenceStudies;
+slope = (log(error_norm(end))-log(error_norm(1,1)))/(log(hlog(end))-log(hlog(1,1)))
 %--------------PLOT-------------------------%
     figure('Color', [1 1 1])
     subplot(1,2,1)
@@ -212,7 +171,8 @@ end
     xlabel('log(h)'), ylabel('log(|u^h-u|)'), title('L2 Norm of Basis Order: 1, Fxn Order: 2'); 
     grid on
     subplot(1,2,2)
-    plot(uh,u_x), xlabel('Approximated Function (u^h)'), ylabel('True Function (u)'), title('Approximated Solution to True Solution')
+    plot(uh,u), xlabel('Approximated Function (u^h)'), ylabel('True Function (u)'), title('Approximated Solution to True Solution')
     grid on
     print -dpng error_plots.png
-%end
+
+end
