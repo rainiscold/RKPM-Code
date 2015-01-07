@@ -1,3 +1,15 @@
+function [H,H0] = GaussBasisFunction(basis_order, x_g, x_i)
+%Computes the column vector using the inputs of x and x_i. Will always be
+%the order + 1 in length. 
+
+H=zeros(basis_order+1,1);
+for i=0:basis_order
+    H(i+1,1) = (x_g-x_i).^i;
+    H0 = zeros(basis_order+1,1);
+    H0(1) = 1;
+end
+end
+
 function phig = GaussKernelFunction(x_g,x_i,a)
 %Computes the kernel function using cubic spline for this work.
 
@@ -9,18 +21,6 @@ elseif z_i <= 1
     phig = (4/3)-4*z_i+4*z_i^2-(4/3)*z_i^3;
 else
     phig = 0;
-end
-end
-
-function [H,H0] = GaussBasisFunction(basis_order, x_g, x_i)
-%Computes the column vector using the inputs of x and x_i. Will always be
-%the order + 1 in length. 
-
-H=zeros(basis_order+1,1);
-for i=0:basis_order
-    H(i+1,1) = (x_g-x_i).^i;
-    H0 = zeros(basis_order+1,1);
-    H0(1) = 1;
 end
 end
 
@@ -45,6 +45,36 @@ for i=1:length(x_g)
 end
 end
 
+function [u_g, uh_g] = GaussuFunctions(u_order, x_i, basis_order, a, nint)
+% Compute the true function and the reproduced function using the shape 
+% function found in GaussShapeFunction.m
+
+% Real Function
+u_xi = zeros(1,length(x_i));% not going to use to compare to the reproduced function
+for j=1:length(x_i)% not going to use to compare to the reproduced function
+    u_xi(1,j) = x_i(1,j)^u_order;
+end
+
+%% Gauss Quadrature functions
+% Will create the true and approximated function with the points created to
+% solve for Gauss Quadrature
+
+[x_g,w_g] = GaussPointsandWeights(nint,x_i);
+[psig] = GaussShapeFunction(x_g, x_i, basis_order, a);
+
+% Real Function
+u_g = zeros(1,length(x_g));
+% Reproduced Function
+uh_g = zeros(size(psig,1),1);
+
+for i=1:length(x_g)
+   u_g(1,i) = w_g(i)*x_g(i)^u_order;
+end
+for i=1:size(psig,1)
+    uh_g(i,1) = sum(psig(i,:)*u_xi');
+end
+end
+
 function GaussReproducingFunctions(x_g, x_i, basis_order, a, psi)
 
 completeness = zeros(1,length(x_g));
@@ -54,32 +84,6 @@ for i=1:length(x_g)
         psi = GaussShapeFunction(x_g, x_i, basis_order,a);
         completeness(1,j) = completeness(1,j)+psi(i,j)*(x_i(1,j)')^basis_order
     end
-end
-end
-
-function [u_g, uh_g] = GaussuFunctions(u_order, x_i, basis_order, a, nint)
-% Compute the true function and the reproduced function using the shape 
-% function found in GaussShapeFunction.m
-
-u_xi = zeros(1,length(x_i));
-for j=1:length(x_i)
-    u_xi(1,j) = x_i(1,j)^u_order;
-end
-%% Gauss Quadrature functions
-% Will create the true and approximated function with the points created to
-% solve for Gauss Quadrature
-
-[x_g,w_g] = GaussPointsandWeights(nint,x_i);
-[psig] = GaussShapeFunction(x_g, x_i, basis_order, a);
-
-u_g = zeros(1,length(x_g));
-uh_g = zeros(size(psig,1),1);
-
-for i=1:length(x_g)
-   u_g(i) = w_g(i)*x_g(i)^u_order;
-end
-for i=1:size(psig,1)
-    uh_g(i,1) = sum(psig(i,:)*u_xi');
 end
 end
 
@@ -131,3 +135,40 @@ end
     grid on
     print -dpng error_plots.png
 %end
+
+function [x_g, w_g] = GaussPointsandWeights(nint, x_i)
+% Finds the corresponding weights and abscissa in the grid of a 1D domain.
+
+%[x_i, x, nint] = ConvergenceStudies;
+
+gpts_original = GaussAbcissa(nint);
+wpts_original = GaussWeights(nint);
+
+grid_1 = x_i;
+
+x_integration = zeros(length(gpts_original),length(grid_1)-1);
+gpts = zeros(length(gpts_original),1);
+
+weights = zeros(length(wpts_original),length(grid_1)-1);
+wpts = zeros(length(wpts_original),1);
+
+for i = 1:(length(grid_1)-1)
+    for j = 1:length(gpts)
+        a = 0.1*(i-1);
+        b = 0.1*(i);
+        
+        gpts(j) = ((b-a)/2)*gpts_original(j)+((b+a)/2);
+        x_integration(j,i) = x_integration(j,i)+gpts(j);
+    end
+    for j = 1:length(wpts)
+        a = 0.1*(i-1);
+        b = 0.1*(i);
+        
+        wpts(j) = ((b-a)/2)*wpts_original(j);
+        weights(j,i) = weights(j,i)+wpts(j);
+    end
+end
+
+x_g = reshape(x_integration,1,[]);
+w_g = reshape(weights,1,[]);
+end
