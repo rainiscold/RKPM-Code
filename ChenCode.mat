@@ -133,7 +133,13 @@ end
 %% Convergence Studies Plot
 function ConvergencePlots
 
-[error_norm] = ConvergenceStudies
+[error_norm, hlog, u, uh] = ConvergenceStudies;
+
+
+for i=1:(length(error_norm)-1)
+    ConvergenceRate(i) = (log(error_norm(i+1))-log(error_norm(i)))/(log(hlog(i+1))-log(i))
+end
+
 %--------------PLOT-------------------------%
     figure('Color', [1 1 1])
     subplot(1,2,1)
