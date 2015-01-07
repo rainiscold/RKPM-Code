@@ -1,3 +1,37 @@
+function [x_g, w_g] = GaussPointsandWeights(nint, x_i, domain, h)
+% Finds the corresponding weights and abscissa in the grid of a 1D domain.
+gpts_original = GaussAbcissa(nint);
+wpts_original = GaussWeights(nint);
+
+grid_1 = x_i;
+
+x_integration = zeros(length(gpts_original),length(grid_1)-1);
+gpts = zeros(length(gpts_original),1);
+
+weights = zeros(length(wpts_original),length(grid_1)-1);
+wpts = zeros(length(wpts_original),1);
+
+for i = 1:(length(grid_1)-1)
+    for j = 1:length(gpts)
+        a = domain/h*(i-1);
+        b = domain/h*(i);
+        
+        gpts(j) = ((b-a)/2)*gpts_original(j)+((b+a)/2);
+        x_integration(j,i) = x_integration(j,i)+gpts(j);
+    end
+    for j = 1:length(wpts)
+        a = domain/h*(i-1);
+        b = domain/h*(i);
+        
+        wpts(j) = ((b-a)/2)*wpts_original(j);
+        weights(j,i) = weights(j,i)+wpts(j);
+    end
+end
+
+x_g = reshape(x_integration,1,[]);
+w_g = reshape(weights,1,[]);
+end
+
 function [H,H0] = GaussBasisFunction(basis_order, x_g, x_i)
 %Computes the column vector using the inputs of x and x_i. Will always be
 %the order + 1 in length. 
@@ -11,9 +45,8 @@ end
 end
 
 function phig = GaussKernelFunction(x_g,x_i,a)
-%Computes the kernel function using cubic spline for this work.
-
-%Cubic Spline Kernel Function
+% Computes the kernel function using cubic spline for this work.
+%% Cubic Spline Kernel Function
 z_i = abs((x_g-x_i))/abs(a);
 if z_i <= .5 
     phig = (2/3)-4*z_i^2+4*z_i^3;
@@ -28,16 +61,19 @@ function [psig] = GaussShapeFunction(x_g, x_i, basis_order, a)
 
 for i=1:length(x_g)
     M = zeros(basis_order+1, basis_order+1);
+    x_eval = x_g(i);
     for j=1:length(x_i)
         %Solving the Moment matrix at every node
-        H = GaussBasisFunction(basis_order, x_g(i), x_i(j));
-        phig = GaussKernelFunction(x_g(i),x_i(j),a);
+        x_pts = x_i(j);
+        H = GaussBasisFunction(basis_order, x_eval, x_pts);
+        phig = GaussKernelFunction(x_eval,x_pts,a);
         M = M+H*H'*phig;
     end
     for j=1:length(x_i)
         %Solving for the shape function of u
-        [H,H0] = GaussBasisFunction(basis_order, x_g(i), x_i(j));
-        phig = GaussKernelFunction(x_g(i),x_i(j),a);
+        x_pts = x_i(j);
+        [H,H0] = GaussBasisFunction(basis_order, x_eval, x_pts);
+        phig = GaussKernelFunction(x_eval,x_pts,a);
         %Store each value of psi in a matrix so you can reach for the
         %values later.
         psig(i,j) = H0'*M^(-1)*H*phig;
@@ -45,7 +81,7 @@ for i=1:length(x_g)
 end
 end
 
-function [u_g, uh_g] = GaussuFunctions(u_order, x_i, basis_order, a, nint)
+function [u_g, uh_g] = GaussuFunctions(psig, u_order, x_i, basis_order, a, x_g, w_g)
 % Compute the true function and the reproduced function using the shape 
 % function found in GaussShapeFunction.m
 
@@ -59,35 +95,31 @@ end
 % Will create the true and approximated function with the points created to
 % solve for Gauss Quadrature
 
-[x_g,w_g] = GaussPointsandWeights(nint,x_i);
-[psig] = GaussShapeFunction(x_g, x_i, basis_order, a);
-
 % Real Function
 u_g = zeros(1,length(x_g));
 % Reproduced Function
 uh_g = zeros(size(psig,1),1);
 
 for i=1:length(x_g)
-   u_g(1,i) = w_g(i)*x_g(i)^u_order;
+   u_g(1,i) = x_g(i)^u_order;
 end
 for i=1:size(psig,1)
-    uh_g(i,1) = sum(psig(i,:)*u_xi');
+    uh_g(i,1) = psig(i,:)*u_xi';
 end
 end
 
-function GaussReproducingFunctions(x_g, x_i, basis_order, a, psi)
+function GaussReproducingFunctions(x_g, x_i, basis_order, psig)
 
 completeness = zeros(1,length(x_g));
 
 for i=1:length(x_g)
     for j=1:length(x_i)
-        psi = GaussShapeFunction(x_g, x_i, basis_order,a);
-        completeness(1,j) = completeness(1,j)+psi(i,j)*(x_i(1,j)')^basis_order
+        completeness(1,j) = completeness(1,j)+psig(i,j)*(x_i(1,j)')^basis_order;
     end
 end
 end
 
-%function GaussConvergenceStudies
+function GaussConvergenceStudies
 %% Will check to see at what rate the uh function is converging at.
 % 
 % Inputs:
@@ -102,27 +134,29 @@ end
 
 
 domain = 1; %input('Size of Domain: ');
-u_order = 2; %input('Order of the Function Being Reproduced: ');
-basis_order = 1; %input('Order of the Basis Function: ');
-h_pts = [10 15]; %input('Number of nodes ([a, b, ..., c]): ');
-nint = 3; %input('Number of Gauss Quadtrature integration points: ');
+u_order = 3; %input('Order of the Function Being Reproduced: ');
+basis_order = 2; %input('Order of the Basis Function: ');
+h_pts = [10 100]; %input('Number of nodes ([a, b, ..., c]): ');
+nint = 8; %input('Number of Gauss Quadtrature integration points: ');
 
-a = zeros(1, length(h_pts));
+a_list = zeros(1, length(h_pts));
 hlog = zeros(1,length(h_pts));
 
 for i=1:length(h_pts)
     h = h_pts(1,i);
     hlog(1,i) = domain/h;
-    a(1,i) = (domain+basis_order)*(domain/h);
+    
+    a_list(i) = (domain+basis_order)*(domain/h)+0.0001;
+    a = a_list(i);
     
     x_i = 0:(domain/h):domain;
-    [x_g, w_g] = GaussPointsandWeights(nint, x_i);
+    [x_g, w_g] = GaussPointsandWeights(nint, x_i, domain, h);
     x = 0:(domain/(h*nint)):domain;
     
-    [psig] = GaussShapeFunction(x_g, x_i, basis_order,a(1,i));
-    [u_g, uh_g] = GaussuFunctions(u_order, x_i, basis_order, a, nint);
+    [psig] = GaussShapeFunction(x_g, x_i, basis_order,a);
+    [u_g, uh_g] = GaussuFunctions(psig, u_order, x_i, basis_order, a, x_g, w_g);
     
-    error_norm(i) = sum(((uh_g')-(u_g)).^2);  
+    error_norm(i) = sqrt(sum(((uh_g')-(u_g)).^2*w_g'));  
 end
 %--------------PLOT-------------------------%
     figure('Color', [1 1 1])
@@ -134,41 +168,4 @@ end
     plot(uh_g,u_g), xlabel('Approximated Function (u^h)'), ylabel('True Function (u)'), title('Approximated Solution to True Solution')
     grid on
     print -dpng error_plots.png
-%end
-
-function [x_g, w_g] = GaussPointsandWeights(nint, x_i)
-% Finds the corresponding weights and abscissa in the grid of a 1D domain.
-
-%[x_i, x, nint] = ConvergenceStudies;
-
-gpts_original = GaussAbcissa(nint);
-wpts_original = GaussWeights(nint);
-
-grid_1 = x_i;
-
-x_integration = zeros(length(gpts_original),length(grid_1)-1);
-gpts = zeros(length(gpts_original),1);
-
-weights = zeros(length(wpts_original),length(grid_1)-1);
-wpts = zeros(length(wpts_original),1);
-
-for i = 1:(length(grid_1)-1)
-    for j = 1:length(gpts)
-        a = 0.1*(i-1);
-        b = 0.1*(i);
-        
-        gpts(j) = ((b-a)/2)*gpts_original(j)+((b+a)/2);
-        x_integration(j,i) = x_integration(j,i)+gpts(j);
-    end
-    for j = 1:length(wpts)
-        a = 0.1*(i-1);
-        b = 0.1*(i);
-        
-        wpts(j) = ((b-a)/2)*wpts_original(j);
-        weights(j,i) = weights(j,i)+wpts(j);
-    end
-end
-
-x_g = reshape(x_integration,1,[]);
-w_g = reshape(weights,1,[]);
 end
