@@ -119,7 +119,7 @@ for i=1:length(x_g)
 end
 end
 
-function GaussConvergenceStudies
+function [error_norm, hlog, u_g, uh_g] = GaussConvergenceStudies
 %% Will check to see at what rate the uh function is converging at.
 % 
 % Inputs:
@@ -134,13 +134,14 @@ function GaussConvergenceStudies
 
 
 domain = 1; %input('Size of Domain: ');
-u_order = 3; %input('Order of the Function Being Reproduced: ');
-basis_order = 2; %input('Order of the Basis Function: ');
-h_pts = [10 100]; %input('Number of nodes ([a, b, ..., c]): ');
+u_order = 2; %input('Order of the Function Being Reproduced: ');
+basis_order = 1; %input('Order of the Basis Function: ');
+h_pts = [10 100 1000]; %input('Number of nodes ([a, b, ..., c]): ');
 nint = 8; %input('Number of Gauss Quadtrature integration points: ');
 
 a_list = zeros(1, length(h_pts));
 hlog = zeros(1,length(h_pts));
+error_norm = zeros(1,length(h_pts));
 
 for i=1:length(h_pts)
     h = h_pts(1,i);
@@ -151,13 +152,26 @@ for i=1:length(h_pts)
     
     x_i = 0:(domain/h):domain;
     [x_g, w_g] = GaussPointsandWeights(nint, x_i, domain, h);
-    x = 0:(domain/(h*nint)):domain;
+    % x = 0:(domain/(h*nint)):domain;
     
     [psig] = GaussShapeFunction(x_g, x_i, basis_order,a);
     [u_g, uh_g] = GaussuFunctions(psig, u_order, x_i, basis_order, a, x_g, w_g);
     
     error_norm(i) = sqrt(sum(((uh_g')-(u_g)).^2*w_g'));  
 end
+end
+
+%% Convergence Studies Plot
+function GaussConvergencePlots
+
+[error_norm, hlog, u_g, uh_g] = GaussConvergenceStudies;
+
+slope = 0;
+for i=1:(length(error_norm)-1)
+    slope = slope+(log(error_norm(i+1))-log(error_norm(i)))/(log(hlog(i+1))-log(hlog(i)));
+end
+GaussConvergenceRate = slope/(length(error_norm)-1)
+
 %--------------PLOT-------------------------%
     figure('Color', [1 1 1])
     subplot(1,2,1)
